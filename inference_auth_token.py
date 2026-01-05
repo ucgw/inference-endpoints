@@ -28,7 +28,7 @@ class DomainBasedErrorHandler:
 
 
 # Get refresh authorizer object
-def get_auth_object(force=False):
+def get_auth_object(force=False, do_refresh=False):
     """
     Create a Globus UserApp with the inference service scope
     and trigger the authentication process. If authentication
@@ -52,9 +52,28 @@ def get_auth_object(force=False):
 
     # Authenticate using your Globus account or reuse existing tokens
     auth = app.get_authorizer(GATEWAY_CLIENT_ID)
+    if do_refresh is True:
+        tokens_json = globus_sdk.token_storage.JSONTokenStorage(TOKENS_PATH)
+        glob_auth_cli = globus_sdk.NativeAppAuthClient(AUTH_CLIENT_ID)
+        authorizer = globus_sdk.RefreshTokenAuthorizer(
+                       auth.refresh_token,
+                       glob_auth_cli,
+                       on_refresh=tokens_json.store_token_response
+                     )
 
     # Return the Globus refresh token authorizer
     return auth
+
+
+def get_refresh_token():
+    # Get authorizer object and authenticate if need be
+    auth = get_auth_object(force=False, do_refresh=True)
+
+    # Make sure the stored access token if valid, and refresh otherwise
+    auth.ensure_valid_token()
+
+    # Return the access token
+    return auth.access_token
 
 
 # Get access token
@@ -118,11 +137,12 @@ if __name__ == "__main__":
     # Constant
     AUTHENTICATE_ACTION = "authenticate"
     GET_ACCESS_TOKEN_ACTION = "get_access_token"
+    GET_REFRESH_TOKEN_ACTION = "get_refresh_token"
     GET_TOKEN_EXPIRATION_ACTION = "get_time_until_token_expiration"
 
     # Define possible arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=[AUTHENTICATE_ACTION, GET_ACCESS_TOKEN_ACTION, GET_TOKEN_EXPIRATION_ACTION])
+    parser.add_argument('action', choices=[AUTHENTICATE_ACTION, GET_ACCESS_TOKEN_ACTION, GET_TOKEN_EXPIRATION_ACTION, GET_REFRESH_TOKEN_ACTION])
     parser.add_argument("--units", choices=['seconds', 'minutes', 'hours'], default='seconds', help="Units for the time until token expiration")
     parser.add_argument("-f", "--force", action="store_true", help="authenticate from scratch")
     args = parser.parse_args()
@@ -148,6 +168,10 @@ if __name__ == "__main__":
 
         # Load tokens, refresh token if necessary, and print access token
         print(get_access_token())
+
+    # Get refresh token
+    elif args.action == GET_REFRESH_TOKEN_ACTION:
+        print(get_refresh_token())
 
     # Get token expiration
     elif args.action == GET_TOKEN_EXPIRATION_ACTION:
